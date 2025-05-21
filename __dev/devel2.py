@@ -15,26 +15,15 @@ from tqdm import tqdm
 from typing import Callable
 from typing import Iterable
 
+from imspy_wrapper.main import PredictorWrapper
+
 pd.set_option("display.max_rows", 4)
 pd.set_option("display.max_columns", None)
-
 
 real_inputs = pd.read_csv("/tmp/real_inputs.csv")
 real_inputs = real_inputs[
     ["peptide_sequences", "precursor_charges", "collision_energies"]
 ]
-
-
-# sequences = ["PEPTIDE", "PEPTIDEC[UNIMOD:4]PEPTIDE"] * 2
-
-# data = {"sequences": sequences, "gradient_length": 90}
-# response = requests.post(
-#     "http://localhost:5000/predict_retention_times", json=data, timeout=70
-# )
-# rts = pd.DataFrame(response.json())
-
-# do we want a separate class for each model?
-# likely no, so perhaps simply instantiate them all and instead sequences use inputs_df.
 
 rt_inputs_df = (
     real_inputs[["peptide_sequences"]]
@@ -42,67 +31,7 @@ rt_inputs_df = (
     .rename(columns={"peptide_sequences": "sequences"})
 )
 
-import numpy.typing as npt
-
-@dataclass
-class PredictorWrapper:
-    db: SimpleLMDB
-    server_url: str
-    input_cols: tuple[str]
-    timeout_in_seconds: int = 3_600
-    # applied to every inputs_df and results_df
-    preprocessing: Callable[[pd.DataFrame], pd.DataFrame] = lambda x: x
-    postprocessing: Callable[[pd.DataFrame], pd.DataFrame] = lambda x: x
-    meta: tuple[tuple[str, str | float | int]] = (
-        ("sofware", "imspy"),
-        ("model", "Prosit_2023_intensity_timsTOF"),
-    )
-
-    def sanitize_inputs(self, inputs_df: pd.DataFrame) -> pd.DataFrame:
-        for col in self.input_cols:
-            assert col in inputs_df.columns
-        inputs_df = inputs_df[list(self.input_cols)]
-        inputs_df = self.preprocessing(inputs_df)
-        return inputs_df
-
-    def predict(
-        self,
-        inputs_df: pd.DataFrame,
-        **kwargs,
-    ):
-        inputs_df = self.sanitize_inputs(inputs_df)
-        response = requests.post(
-            url=self.server_url,
-            json=dict(
-                inputs_df=inputs_df.to_dict(orient="records"),
-                kwargs=kwargs,
-            ),
-            timeout=self.timeout_in_seconds,
-        )
-        results_df = pd.DataFrame(response.json())
-        return self.postprocessing(results_df)
-
-    def iter(self, inputs_df: pd.DataFrame, **kwargs):
-        inputs_df = self.sanitize_inputs(inputs_df)
-        # no need to sanitize it in iter_eval:
-        # missing_inputs_df is a subset of inputs_df
-        def iter_eval(missing_inputs_df):
-            missing_results = self.predict(missing_inputs_df,**kwargs)
-            assert len(missing_results) == len(missing_inputs_df)
-            return (((missing_inputs_df.sequences.iloc[idx],), missing_results.iloc[[idx]] ) for idx in range(len(missing_results)))
-        yield from self.db.iter_IO(
-            iter_eval=iter_eval,
-            inputs_df=inputs_df,
-            meta=self.meta,
-        )
-
-    def predict_compact(self, inputs_df: pd.DataFrame) -> list[dict[str, npt.NDArray]]:
-        return pd.DataFrame(dict(iRT=[data["iRT"][0] for seq, data in self.iter(inputs_df)]))
-
-
-
-
-
+# TODO: generalize this to not use iRT in predict_compact
 # https://github.com/wilhelm-lab/dlomix/blob/main/example_dataset/proteomTools_train.csv
 
 def addcol(df, **kwargs):
@@ -126,11 +55,31 @@ deep_gru_rt_predictor = PredictorWrapper(
     server_url="http://localhost:5000/predict_iRTs",
     input_cols=("sequences",),
 )
-%%timeit
-deep_gru_rt_predictor.predict_compact(irts)
+
+xx = deep_gru_rt_predictor.predict_compact(irts)
 
 %%time
-xx = deep_gru_rt_predictor.predict(irts)
+xx = deep_gru_rt_predictor.predict(irts.iloc[:1000])
+xx = list(deep_gru_rt_predictor.iter(irts.iloc[:1000]))
+
+
+
+
+
+xx = deep_gru_rt_predictor.predict_compact(irts.iloc[:10])
+deep_gru_rt_predictor.predict_compact(irts)
+
+
+cols = [
+    *deep_gru_rt_predictor.input_cols,
+    *deep_gru_rt_predictor.columns_to_save,
+]
+
+
+
+
+
+pd.DataFrame(x)
 
 
 pd.set_option("display.max_rows", 20)
