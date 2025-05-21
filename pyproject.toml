@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools >= 64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name="imspy_wrapper"
+version="0.0.1"
+description="SHORT DESC."
+readme="README.md"
+authors=[
+    {name="MatteoLacki",email="matteo.lacki@gmail.com"},
+]
+dependencies = [
+    "click",
+    "imspy",
+    "numpy",
+    "pandas",
+    "flask",
+]
+requires-python = ">=3.6"
+
+[project.optional-dependencies]
+dev = [
+    "twine",
+    "pytest",
+    "ipython",
+    "plotnine",
+]
+
+
+[project.scripts]
+serve_david_teschner_models = "imspy_wrapper.cli.serve_models:serve_david_teschner_models"
+
+[project.urls]
+homepage="https://github.com/MatteoLacki/imspy_wrapper.git"
+repository="https://github.com/MatteoLacki/imspy_wrapper.git"
+
+[tool.uv]
+reinstall-package = ["imspy_wrapper"]
+
+# [tool.pytest.ini_options]
+# testpaths = ["tests"]
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+imspy_wrapper = ["data/*.csv"]
