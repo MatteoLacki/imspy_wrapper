@@ -48,12 +48,17 @@ def get_iim_predictor():
                 desc="Getting monoisotopic m/z",
             )
         ]
-        return simulate_ion_mobilities_and_variance(
+
+        predictions = simulate_ion_mobilities_and_variance(
             ions=inputs_df[["sequence", "charge", "mz"]],
-            im_lower=9.0,
+            im_lower=0.0,
             im_upper=100000.0,
             remove_mods=True,
         )
+        predictions = predictions[
+            ["inv_mobility_gru_predictor", "inv_mobility_gru_predictor_std"]
+        ]
+        return predictions
 
     return predict_iims
 
