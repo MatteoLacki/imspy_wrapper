@@ -49,24 +49,62 @@ irts = pd.concat(
     ignore_index=True,
 )
 
-# rm -rf /home/matteo/tmp/test_rts_0
+# rm -rf /home/matteo/tmp/test_rts_1
 deep_gru_rt_predictor = PredictorWrapper(
-    db=SimpleLMDB(path="/home/matteo/tmp/test_rts_0"),
+    db=SimpleLMDB(path="/home/matteo/tmp/test_rts_1"),
     server_url="http://localhost:5000/predict_iRTs",
     input_cols=("sequences",),
 )
 
+%%timeit
+xx = deep_gru_rt_predictor.predict_compact(irts, return_inputs=True)
+
+
+xx = list(deep_gru_rt_predictor.iter(irts.iloc[:1000]))
+self = deep_gru_rt_predictor
+
+
+
+
+xx = deep_gru_rt_predictor.predict_compact(irts.iloc[:1000])
+
+predictions = deep_gru_rt_predictor.predict(irts.iloc[:1000])
+missing_inputs_df = irts.iloc[:1000]
+
+from cachemir.main import ITERTUPLES
+from cachemir.serialization import derive_types
+from cachemir.serialization import enforce_types
+from functools import partial
+
+output_types = tuple(derive_types(predictions).values())
+def sanitize_outputs(outputs):
+    x = enforce_types(outputs, types=output_types)
+    return x if len(x) > 1 else x[0]
+
+predictions = predictions[list(deep_gru_rt_predictor.columns_to_save)]
+list(zip(ITERTUPLES(missing_inputs_df), map(sanitize_outputs, ITERTUPLES(predictions))))
+
+
+
+
 xx = deep_gru_rt_predictor.predict_compact(irts)
+with deep_gru_rt_predictor.db.open("r") as txn:
+    print(len(txn))
+# we should modify cachemir to have a d
+
 
 %%time
 xx = deep_gru_rt_predictor.predict(irts.iloc[:1000])
-xx = list(deep_gru_rt_predictor.iter(irts.iloc[:1000]))
 
+%%time
+xx = list(deep_gru_rt_predictor.iter(irts))
 
+inputs, outputs = xx[0]
 
+%%timeit
+xx = deep_gru_rt_predictor.predict_compact(irts)
 
-
-xx = deep_gru_rt_predictor.predict_compact(irts.iloc[:10])
+%%timeit
 deep_gru_rt_predictor.predict_compact(irts)
 
 
@@ -74,8 +112,10 @@ cols = [
     *deep_gru_rt_predictor.input_cols,
     *deep_gru_rt_predictor.columns_to_save,
 ]
+with deep_gru_rt_predictor.db.open("r") as txn:
+    print(len(txn))
 
-
+len(irts.sequences.unique())
 
 
 

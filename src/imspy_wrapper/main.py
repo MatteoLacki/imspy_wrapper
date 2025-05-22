@@ -2,15 +2,22 @@ import pandas as pd
 import requests
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable
 from typing import Iterable
 
+from cachemir.main import ITERTUPLES
 from cachemir.main import SimpleLMDB
+from cachemir.serialization import derive_types
+from cachemir.serialization import enforce_types
 
 
 @dataclass
 class PredictorWrapper:
-    """A (hopefully) common interface to David's models."""
+    """A (hopefully) common interface to David's models.
+
+    postprocessing should include some scaling.
+    """
 
     db: SimpleLMDB
     server_url: str
@@ -55,17 +62,19 @@ class PredictorWrapper:
         inputs_df = self.sanitize_inputs(inputs_df)
 
         def iter_eval(missing_inputs_df):
-            """Callback when missing values observed."""
-            # NO NEED TO SANITIZE
-            # missing_inputs_df is a subset of inputs_df
+            """Callback for non-cached values."""
+            # NO NEED TO SANITIZE INPUTS: missing_inputs_df is a subset of inputs_df
             predictions = self.predict(missing_inputs_df)
             assert len(predictions) == len(missing_inputs_df)
-            return (
-                (
-                    tuple(missing_inputs_df[self.input_cols].iloc[idx]),
-                    predictions.iloc[[idx]],
-                )
-                for idx in range(len(missing_inputs_df))
+            output_types = tuple(derive_types(predictions).values())
+
+            def sanitize_outputs(outputs):
+                x = enforce_types(outputs, types=output_types)
+                return x if len(x) > 1 else x[0]
+
+            yield from zip(
+                ITERTUPLES(missing_inputs_df),
+                map(sanitize_outputs, ITERTUPLES(predictions)),
             )
 
         yield from self.db.iter_IO(
@@ -74,11 +83,26 @@ class PredictorWrapper:
             meta=self.meta,
         )
 
-    def predict_compact(self, inputs_df: pd.DataFrame) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                **dict(zip(self.input_cols, inputs)),
-                **{col: output[0] for col, output in outputs.items()},
-            }
-            for inputs, outputs in self.iter(inputs_df)
-        )
+    def predict_compact(
+        self,
+        inputs_df: pd.DataFrame,
+        return_inputs: bool = False,
+    ) -> pd.DataFrame:
+        if return_inputs:
+
+            def iter_parsed_IO(inputs_df):
+                for inputs, outputs in self.iter(inputs_df):
+                    row = dict(zip(self.input_cols, inputs))
+                    if isinstance(outputs, (float, int, str)):
+                        row[self.columns_to_save[0]] = outputs
+                    else:
+                        for col, output in zip(self.columns_to_save, outputs):
+                            row[col] = output
+                    yield row
+
+            return pd.DataFrame(iter_parsed_IO(inputs_df))
+        else:
+            return pd.DataFrame(
+                [outputs for _, outputs in self.iter(inputs_df)],
+                columns=self.columns_to_save,
+            )
