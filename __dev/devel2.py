@@ -34,10 +34,12 @@ rt_inputs_df = (
 # TODO: generalize this to not use iRT in predict_compact
 # https://github.com/wilhelm-lab/dlomix/blob/main/example_dataset/proteomTools_train.csv
 
+
 def addcol(df, **kwargs):
     for col, val in kwargs.items():
         df[col] = val
     return df
+
 
 irts = pd.concat(
     (
@@ -53,114 +55,71 @@ irts = pd.concat(
 deep_gru_rt_predictor = PredictorWrapper(
     db=SimpleLMDB(path="/home/matteo/tmp/test_rts_1"),
     server_url="http://localhost:5000/predict_iRTs",
-    input_cols=("sequences",),
+    preprocessing=lambda x: x,
+    postprocessing=lambda x: x,
+    input_types=(("sequences", str),),
+    columns_to_save=("iRT",),
+    meta=(
+        ("sofware", "imspy"),
+        ("model", "Prosit_2023_intensity_timsTOF"),
+    ),
 )
 
-%%timeit
-xx = deep_gru_rt_predictor.predict_compact(irts, return_inputs=True)
+
+# deep_gru_iim_predictor = PredictorWrapper(
+#     db=SimpleLMDB(path="/home/matteo/tmp/test_ims_0"),
+#     server_url="http://localhost:5000/predict_iims",
+#     preprocessing=lambda x: x,
+#     postprocessing=lambda x: x,
+#     input_types=(("sequences", str),),
+#     columns_to_save=("iRT",),
+#     meta=(
+#         ("sofware", "imspy"),
+#         ("model", "Prosit_2023_intensity_timsTOF"),
+#     ),
+# )
 
 
-xx = list(deep_gru_rt_predictor.iter(irts.iloc[:1000]))
-self = deep_gru_rt_predictor
+xx = deep_gru_rt_predictor.predict(irts, return_inputs=True)
+xx = deep_gru_rt_predictor.direct_predict(irts, return_inputs=True)
+
+from imspy.simulation.timsim.jobs.simulate_ion_mobilities_and_variance import (
+    simulate_ion_mobilities_and_variance,
+)
+from imspy.data.peptide import PeptideSequence
+from imspy.chemistry.utility import calculate_mz
 
 
-
-
-xx = deep_gru_rt_predictor.predict_compact(irts.iloc[:1000])
-
-predictions = deep_gru_rt_predictor.predict(irts.iloc[:1000])
-missing_inputs_df = irts.iloc[:1000]
-
-from cachemir.main import ITERTUPLES
-from cachemir.serialization import derive_types
-from cachemir.serialization import enforce_types
-from functools import partial
-
-output_types = tuple(derive_types(predictions).values())
-def sanitize_outputs(outputs):
-    x = enforce_types(outputs, types=output_types)
-    return x if len(x) > 1 else x[0]
-
-predictions = predictions[list(deep_gru_rt_predictor.columns_to_save)]
-list(zip(ITERTUPLES(missing_inputs_df), map(sanitize_outputs, ITERTUPLES(predictions))))
-
-
-
-
-xx = deep_gru_rt_predictor.predict_compact(irts)
-with deep_gru_rt_predictor.db.open("r") as txn:
-    print(len(txn))
-# we should modify cachemir to have a d
-
-
-%%time
-xx = deep_gru_rt_predictor.predict(irts.iloc[:1000])
-
-%%time
-xx = list(deep_gru_rt_predictor.iter(irts))
-
-inputs, outputs = xx[0]
-
-%%timeit
-xx = deep_gru_rt_predictor.predict_compact(irts)
-
-%%timeit
-deep_gru_rt_predictor.predict_compact(irts)
-
-
-cols = [
-    *deep_gru_rt_predictor.input_cols,
-    *deep_gru_rt_predictor.columns_to_save,
+ions = real_inputs.rename(
+    columns={"peptide_sequences": "sequence", "precursor_charges": "charge"}
+)
+ions["mz"] = [
+    calculate_mz(PeptideSequence(sequence).mono_isotopic_mass, charge)
+    for sequence, charge in zip(ions.sequence, ions.charge)
 ]
-with deep_gru_rt_predictor.db.open("r") as txn:
-    print(len(txn))
+del ions["collision_energies"]
 
-len(irts.sequences.unique())
-
+# carbamidomethylation is a common modification that is annotated in the UNIMOD database
 
 
-pd.DataFrame(x)
+# create a peptide sequence object, might contain modifications
 
 
-pd.set_option("display.max_rows", 20)
-irts.groupby("path").irt.quantile([0, 0.5, 0.95, 1])
-pd.set_option("display.max_rows", 5)
-
-
-%%time
-xx = deep_gru_rt_predictor.predict(irts)
-
-%%time
-xx = list(deep_gru_rt_predictor.iter(irts.iloc[:100]))
-
-
-
-def scale(xx, new_min=0.0, new_max=60.0):
-    return (xx - xx.min()) / (xx.max() - xx.min()) * (new_max - new_min) + new_min
-
-
-irts["normed_pred_iRT"] = scale(
-    irts.pred_iRT, new_min=irts.irt.min(), new_max=irts.irt.max()
+deep_gru_iim_predictor = PredictorWrapper(
+    db=SimpleLMDB(path="/home/matteo/tmp/test_ims_0"),
+    server_url="http://localhost:5000/predict_iims",
+    preprocessing=lambda x: x,
+    postprocessing=lambda x: x,
+    input_types=(
+        ("sequence", str),
+        ("charge", str),
+    ),
+    columns_to_save=(
+        "inv_mobility_gru_predictor",
+        "inv_mobility_gru_predictor_std",
+    ),
+    meta=(
+        ("sofware", "imspy"),
+        ("model", "deep_iim_mean_and_std_predictor"),
+    ),
 )
-irts["rt_diff"] = irts.normed_pred_iRT - irts.irt
-
-plot = (
-    P.ggplot(data=irts)
-    + P.geom_freqpoly(P.aes(x="rt_diff", color="path"), size=1)
-    + P.theme_minimal()
-)
-plot.show()
-
-
-plot = (
-    P.ggplot(data=irts)
-    + P.geom_freqpoly(P.aes(x="pred_iRT-irt", color="path"), size=1)
-    + P.theme_minimal()
-)
-plot.show()
-
-
-plot = P.ggplot(data=irts) + P.geom_freqpoly(P.aes(x="irt", color="path"), size=2)
-plot.show()
-
-irts.to_parquet("/home/matteo/tmp/debugging_imspy_rt.parquet")

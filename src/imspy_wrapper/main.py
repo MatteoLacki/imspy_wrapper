@@ -20,8 +20,7 @@ class PredictorWrapper:
     """
 
     db: SimpleLMDB
-    server_url: str
-    input_cols: tuple[str]
+    server_url: str = "http://localhost:5000/predict_iRTs"
     timeout_in_seconds: int = 3_600
     # applied to every inputs_df and results_df
     preprocessing: Callable[[pd.DataFrame], pd.DataFrame] = lambda x: x
@@ -44,7 +43,7 @@ class PredictorWrapper:
         inputs_df = self.preprocessing(inputs_df)
         return inputs_df
 
-    def predict(
+    def direct_predict(
         self,
         inputs_df: pd.DataFrame,
         **kwargs,
@@ -64,7 +63,7 @@ class PredictorWrapper:
         def iter_eval(missing_inputs_df):
             """Callback for non-cached values."""
             # NO NEED TO SANITIZE INPUTS: missing_inputs_df is a subset of inputs_df
-            predictions = self.predict(missing_inputs_df)
+            predictions = self.direct_predict(missing_inputs_df)
             assert len(predictions) == len(missing_inputs_df)
             output_types = tuple(derive_types(predictions).values())
 
@@ -83,11 +82,12 @@ class PredictorWrapper:
             meta=self.meta,
         )
 
-    def predict_compact(
+    def predict(
         self,
         inputs_df: pd.DataFrame,
         return_inputs: bool = False,
     ) -> pd.DataFrame:
+        """Predict"""
         if return_inputs:
 
             def iter_parsed_IO(inputs_df):
