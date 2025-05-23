@@ -37,3 +37,7 @@ plot = (
     + P.theme_minimal()
 )
 plot.show()
+
+plt.hist()
+X.rt_diff / 60
+X.koina_diff / X.irt.max()

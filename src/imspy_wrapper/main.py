@@ -106,3 +106,37 @@ class PredictorWrapper:
                 [outputs for _, outputs in self.iter(inputs_df)],
                 columns=self.columns_to_save,
             )
+
+
+DeepGruRtPredictor = partial(
+    PredictorWrapper,
+    db=SimpleLMDB(path="/home/matteo/tmp/test_rts_1"),
+    server_url="http://localhost:5000/predict_iRTs",
+    preprocessing=lambda x: x,
+    postprocessing=lambda x: x,
+    input_types=(("sequences", str),),
+    columns_to_save=("iRT",),
+    meta=(
+        ("sofware", "imspy"),
+        ("model", "Prosit_2023_intensity_timsTOF"),
+    ),
+)
+DeepGruIimPredictor = partial(
+    PredictorWrapper,
+    db=SimpleLMDB(path="/home/matteo/tmp/test_ims_0"),
+    server_url="http://localhost:5000/predict_iims",
+    preprocessing=lambda x: x,
+    postprocessing=lambda x: x,
+    input_types=(
+        ("sequence", str),
+        ("charge", str),
+    ),
+    columns_to_save=(
+        "inv_mobility_gru_predictor",
+        "inv_mobility_gru_predictor_std",
+    ),
+    meta=(
+        ("sofware", "imspy"),
+        ("model", "deep_iim_mean_and_std_predictor"),
+    ),
+)
